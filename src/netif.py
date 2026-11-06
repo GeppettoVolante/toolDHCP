@@ -1,0 +1,137 @@
+"""List of the PC's IPv4 network interfaces, stdlib only.
+
+Windows: ctypes + GetAdaptersAddresses (iphlpapi), no external dependencies.
+Other OSes: minimal fallback (development/testing only, not a target).
+"""
+import ctypes
+import ipaddress
+import socket
+import sys
+from dataclasses import dataclass
+
+IF_TYPE_LOOPBACK = 24
+IF_TYPE_TUNNEL = 131
+OPER_UP = 1
+
+
+@dataclass
+class Iface:
+    name: str          # friendly name (e.g. "Ethernet 2")
+    description: str   # adapter description (e.g. "Realtek USB GbE")
+    ip: str
+    prefix: int
+    mac: str
+    up: bool = True
+
+    @property
+    def mask(self) -> str:
+        return str(ipaddress.IPv4Network(f"{self.ip}/{self.prefix}", strict=False).netmask)
+
+    @property
+    def network(self) -> ipaddress.IPv4Network:
+        return ipaddress.IPv4Network(f"{self.ip}/{self.prefix}", strict=False)
+
+    @property
+    def link_local(self) -> bool:
+        return self.ip.startswith("169.254.")
+
+    def label(self) -> str:
+        extra = " [link-local, no static IP?]" if self.link_local else ""
+        return f"{self.name} - {self.ip}/{self.prefix} ({self.description}){extra}"
+
+
+def list_interfaces() -> list:
+    if sys.platform == "win32":
+        return _list_windows()
+    return _list_fallback()
+
+
+def _list_fallback():
+    out = []
+    try:
+        for ip in sorted(set(socket.gethostbyname_ex(socket.gethostname())[2])):
+            if not ip.startswith("127."):
+                out.append(Iface(ip, "", ip, 24, "00:00:00:00:00:00"))
+    except OSError:
+        pass
+    return out
+
+
+def _list_windows():
+    from ctypes import wintypes as w
+
+    class SOCKET_ADDRESS(ctypes.Structure):
+        _fields_ = [("lpSockaddr", ctypes.c_void_p), ("iSockaddrLength", ctypes.c_int)]
+
+    class UNICAST(ctypes.Structure):
+        pass
+
+    UNICAST._fields_ = [
+        ("Length", w.ULONG), ("Flags", w.DWORD),
+        ("Next", ctypes.POINTER(UNICAST)),
+        ("Address", SOCKET_ADDRESS),
+        ("PrefixOrigin", ctypes.c_int), ("SuffixOrigin", ctypes.c_int),
+        ("DadState", ctypes.c_int),
+        ("ValidLifetime", w.ULONG), ("PreferredLifetime", w.ULONG),
+        ("LeaseLifetime", w.ULONG),
+        ("OnLinkPrefixLength", ctypes.c_ubyte),
+    ]
+
+    class ADAPTER(ctypes.Structure):
+        pass
+
+    ADAPTER._fields_ = [
+        ("Length", w.ULONG), ("IfIndex", w.DWORD),
+        ("Next", ctypes.POINTER(ADAPTER)),
+        ("AdapterName", ctypes.c_char_p),
+        ("FirstUnicastAddress", ctypes.POINTER(UNICAST)),
+        ("FirstAnycastAddress", ctypes.c_void_p),
+        ("FirstMulticastAddress", ctypes.c_void_p),
+        ("FirstDnsServerAddress", ctypes.c_void_p),
+        ("DnsSuffix", w.LPWSTR), ("Description", w.LPWSTR), ("FriendlyName", w.LPWSTR),
+        ("PhysicalAddress", ctypes.c_ubyte * 8), ("PhysicalAddressLength", w.ULONG),
+        ("Flags", w.ULONG), ("Mtu", w.ULONG), ("IfType", w.ULONG), ("OperStatus", ctypes.c_int),
+    ]
+
+    gaa = ctypes.windll.iphlpapi.GetAdaptersAddresses
+    gaa.argtypes = [w.ULONG, w.ULONG, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(w.ULONG)]
+    gaa.restype = w.ULONG
+    AF_INET = 2
+    FLAGS = 0x2 | 0x4 | 0x8  # skip anycast, multicast, dns server
+    size = w.ULONG(15000)
+    for _ in range(5):
+        buf = ctypes.create_string_buffer(size.value)
+        rc = gaa(AF_INET, FLAGS, None, buf, ctypes.byref(size))
+        if rc != 111:  # ERROR_BUFFER_OVERFLOW => retry with the updated size
+            break
+    if rc != 0:
+        raise OSError(f"GetAdaptersAddresses fallita (codice {rc})")
+
+    out = []
+    ad = ctypes.cast(buf, ctypes.POINTER(ADAPTER))
+    while ad:
+        a = ad.contents
+        if a.IfType not in (IF_TYPE_LOOPBACK, IF_TYPE_TUNNEL):
+            mac = ":".join(f"{b:02X}" for b in a.PhysicalAddress[:a.PhysicalAddressLength])
+            ua = a.FirstUnicastAddress
+            while ua:
+                u = ua.contents
+                raw = ctypes.string_at(u.Address.lpSockaddr, 8) if u.Address.lpSockaddr else b""
+                if len(raw) == 8 and int.from_bytes(raw[:2], "little") == AF_INET:
+                    out.append(Iface(a.FriendlyName or "?", a.Description or "",
+                                     str(ipaddress.IPv4Address(raw[4:8])),
+                                     u.OnLinkPrefixLength, mac,
+                                     a.OperStatus == OPER_UP))
+                ua = u.Next
+        ad = a.Next
+    return out
+
+
+def usable(ifaces):
+    """Only interfaces that are up, have an IP and a real subnet (no VPN-style /32)."""
+    return [i for i in ifaces if i.up and i.ip != "0.0.0.0" and i.prefix < 32]
+
+
+if __name__ == "__main__":
+    for i in list_interfaces():
+        print(("UP   " if i.up else "DOWN ") + i.label(), i.mac)
