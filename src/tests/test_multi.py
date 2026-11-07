@@ -81,7 +81,7 @@ class TestNetifOui(unittest.TestCase):
              netif.Iface("d", "", "0.0.0.0", 0, "")]
         self.assertEqual([i.name for i in netif.usable(L)], ["a"])
 
-    @unittest.skipUnless(sys.platform == "win32", "solo Windows")
+    @unittest.skipUnless(sys.platform == "win32", "Windows only")
     def test_list_windows_runs(self):
         for i in netif.list_interfaces():
             self.assertRegex(i.ip, r"^\d+\.\d+\.\d+\.\d+$")

@@ -31,6 +31,6 @@ Lease is infinite (`0xFFFFFFFF`, RFC 2131 sec. 3.3). Only devices without an IP 
 - `tools/update_oui.py` regenerates `oui_data.py` from the IEEE MA-L registry
 
 ## Ideas / contributions welcome
-See `todo.md` (Italian working notes). Open points: configurable finite lease, re-addressing devices that already have an IP (e.g. via CIP), manual MAC entry.
+Open points: configurable finite lease, re-addressing devices that already have an IP (e.g. via CIP), manual MAC entry.
 
 Protocol references: RFC 951 (BOOTP), RFC 2131 (DHCP), RFC 2132 (options), RFC 1542 (BOOTP/DHCP interoperability).

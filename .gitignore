@@ -1,3 +1,7 @@
 build-out/
 *.spec
 __pycache__/
+
+# Local working notes (kept in the project folder, not published)
+log.md
+todo.md
