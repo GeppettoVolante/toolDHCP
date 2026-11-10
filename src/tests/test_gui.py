@@ -63,9 +63,7 @@ class TestSmoke(unittest.TestCase):
         app.withdraw()
         try:
             lo = netif.Iface("lo", "loopback", "127.0.0.1", 8, "")
-            app.ifaces = [lo]
-            app.cmb["values"] = [lo.label()]
-            app.cmb.current(0)
+            app.set_ifaces([lo])
             app.start()
             self.assertIsNotNone(app.resp)
             app.resp.handle(request())
@@ -79,6 +77,88 @@ class TestSmoke(unittest.TestCase):
             app.change_iface()
             self.assertIsNone(app.resp)
         finally:
+            app.stop_server()
+            app.destroy()
+
+    def test_auto_permanent_flow(self):
+        import time
+        import cip
+        calls = []
+
+        def fake(cur, ip, mask, gw, **kw):
+            calls.append((cur, ip, kw.get("expect_mac")))
+            return cip.Result(ok=True, verified=True, messages=["fake"])
+
+        real, cip.make_static = cip.make_static, fake
+        try:
+            app = gui.App()
+        except Exception as e:
+            cip.make_static = real
+            self.skipTest(f"Tk not available: {e}")
+        app.withdraw()
+        try:
+            app.set_ifaces([netif.Iface("lo", "loopback", "127.0.0.1", 8, "")])
+            app.start()
+            app.v_mac.set(MAC)
+            app.v_ip.set("127.0.0.5")
+            app.v_mask.set("255.0.0.0")
+            app.v_perm.set(True)
+            app.arm()
+            self.assertEqual(app.perm[MAC]["state"], "pending")
+            app.check_permanent()                      # not seen yet: nothing happens
+            self.assertEqual(calls, [])
+            app.resp.handle(request())                 # BOOTP reply generated -> status 'BOOTP replied'
+            app.check_permanent()                      # too early (< 2 s after the reply)
+            self.assertEqual(calls, [])
+            app.resp.seen[MAC].last -= 5
+            app.perm[MAC]["armed_at"] -= 20
+            app.check_permanent()
+            self.assertEqual(app.perm[MAC]["state"], "running")
+            for _ in range(50):
+                try:
+                    app.on_event(app.evq.get(timeout=0.1))
+                    break
+                except Exception:
+                    pass
+            self.assertEqual(calls, [("127.0.0.5", "127.0.0.5", MAC)])
+            self.assertEqual(app.perm[MAC]["state"], "ok")
+            app.refresh_tree()
+            self.assertIn("STATIC", app.tree.set(MAC, "static"))
+        finally:
+            cip.make_static = real
+            app.stop_server()
+            app.destroy()
+
+    def test_sweep_flow_updates_devices(self):
+        import cip
+        import subnetscan
+        ident = cip.Identity("10.20.30.40", 1, 12, 9, "3.001", 77, "Dev", "", via="10.20.30.250")
+        real = subnetscan.sweep
+        subnetscan.sweep = lambda iface, nets, **kw: (kw["progress"](1, 1, 1), [ident])[1]
+        try:
+            app = gui.App()
+        except Exception as e:
+            subnetscan.sweep = real
+            self.skipTest(f"Tk not available: {e}")
+        app.withdraw()
+        try:
+            app.set_ifaces([netif.Iface("lo", "loopback", "127.0.0.1", 8, "")])
+            app.start()
+            nets, _ = subnetscan.parse_nets("10.20.30.0/24")
+            app.start_sweep(nets)
+            for _ in range(50):
+                try:
+                    ev = app.evq.get(timeout=0.1)
+                except Exception:
+                    continue
+                app.on_event(ev)
+                if ev[0] == "sweep_done":
+                    break
+            self.assertIn("10.20.30.40", app.found)
+            self.assertEqual(app.dtree.set("10.20.30.40", "reach"), "alias 10.20.30.250")
+            self.assertFalse(app.sweeping)
+        finally:
+            subnetscan.sweep = real
             app.stop_server()
             app.destroy()
 
