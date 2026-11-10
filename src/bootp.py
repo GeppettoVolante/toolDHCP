@@ -6,6 +6,7 @@ Layout (RFC 951 / 2131): fixed 236-byte header, then
   - plain BOOTP: 'vend' field (64 bytes, 300 total)
   - DHCP: magic cookie 99.130.83.99 + options, terminated by End (255)
 """
+import re
 import struct
 import ipaddress
 from dataclasses import dataclass, field
@@ -53,10 +54,16 @@ class PacketError(ValueError):
 
 
 def mac_to_bytes(mac: str) -> bytes:
-    parts = mac.replace("-", ":").split(":")
-    if len(parts) != 6:
-        raise ValueError(f"invalid MAC address: {mac!r}")
-    return bytes(int(p, 16) for p in parts)
+    """Parse a MAC typed or pasted by hand. Accepted: AA:BB:CC:DD:EE:FF, AA-BB-..., aabbccddeeff,
+    AABB.CCDD.EEFF (Cisco), with or without spaces, upper or lower case."""
+    s = mac.strip()
+    parts = s.replace("-", ":").split(":")
+    if len(parts) == 6 and all(1 <= len(p) <= 2 for p in parts):
+        return bytes(int(p, 16) for p in parts)
+    compact = re.sub(r"[.\s:\-]", "", s)
+    if len(compact) == 12 and all(c in "0123456789abcdefABCDEF" for c in compact):
+        return bytes.fromhex(compact)
+    raise ValueError(f"invalid MAC address: {mac!r}")
 
 
 def mac_to_str(b: bytes) -> str:

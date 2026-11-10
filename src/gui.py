@@ -28,7 +28,7 @@ import server
 import subnetscan
 
 APP = "toolDHCP"
-VERSION = "2.0"
+VERSION = "2.1"
 
 # ---- palette: black / blue ----
 BG = "#090D16"
@@ -334,11 +334,11 @@ class App(ctk.CTk):
         tree.tag_configure("dim", foreground=MUTED)
         return wrap, tree
 
-    def entry(self, parent, label, var, width, col):
+    def entry(self, parent, label, var, width, col, placeholder=None):
         ctk.CTkLabel(parent, text=label, font=("Segoe UI", 11), text_color=MUTED,
                      anchor="w").grid(row=0, column=col, sticky="w", padx=6)
         e = ctk.CTkEntry(parent, textvariable=var, width=width, height=32, fg_color=CARD2,
-                         border_color=LINE, text_color=TEXT)
+                         border_color=LINE, text_color=TEXT, placeholder_text=placeholder)
         e.grid(row=1, column=col, padx=6, pady=(0, 2))
         return e
 
@@ -469,10 +469,11 @@ class App(ctk.CTk):
         self.v_perm = tk.BooleanVar(value=True)
         g = ctk.CTkFrame(form, fg_color="transparent")
         g.pack(fill="x", padx=8, pady=(2, 4))
-        for col, (lbl, var, w) in enumerate((("MAC", self.v_mac, 170), ("IP", self.v_ip, 140),
+        for col, (lbl, var, w) in enumerate((("MAC (select a row, or type/paste one)", self.v_mac, 250),
+                                             ("IP", self.v_ip, 140),
                                              ("Subnet mask", self.v_mask, 140),
                                              ("Gateway (optional)", self.v_gw, 140))):
-            self.entry(g, lbl, var, w, col)
+            self.entry(g, lbl, var, w, col, "AA:BB:CC:DD:EE:FF" if col == 0 else None)
         r2 = ctk.CTkFrame(form, fg_color="transparent")
         r2.pack(fill="x", padx=14, pady=(2, 12))
         ctk.CTkCheckBox(r2, text="Make permanent (switch the device to a static IP over EtherNet/IP)",
@@ -537,6 +538,7 @@ class App(ctk.CTk):
                 notify(self, "Cannot arm", f"IP {ip} is already armed for {m}.", bad=True)
                 return
         self.resp.arm(mac, ip, mask, gw)
+        self.v_mac.set(mac)                  # show the normalized form
         auto = bool(self.v_perm.get())
         self.perm[mac] = dict(auto=auto, state="pending" if auto else "-", tries=0, next=0.0,
                               armed_at=time.time())

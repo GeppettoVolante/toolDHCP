@@ -9,7 +9,7 @@ Small Windows tool that hands out an IP address to **factory-fresh network devic
 ## How it works
 1. Pick the network interface at startup (IPv4 only; /32 and link-local are filtered out).
 2. The tool **listens passively** and lists every MAC that asks for an address, with the vendor resolved from the official IEEE OUI registry.
-3. Select a MAC, type the IP (and optionally mask/gateway), click **Arm**. From then on the tool answers every BOOTP or DHCP request from that MAC until you disarm it. Several MACs can be armed at once.
+3. Select a MAC (or type/paste one by hand: `AA:BB:CC:DD:EE:FF`, `AA-BB-...`, `aabbccddeeff` or `AABB.CCDD.EEFF`; it shows as *waiting* until the device asks), type the IP (and optionally mask/gateway), click **Arm**. From then on the tool answers every BOOTP or DHCP request from that MAC until you disarm it. Several MACs can be armed at once.
 
 Lease is infinite (`0xFFFFFFFF`, RFC 2131 sec. 3.3).
 
@@ -37,6 +37,6 @@ Lease is infinite (`0xFFFFFFFF`, RFC 2131 sec. 3.3).
 - `tools/update_oui.py` regenerates `oui_data.py` from the IEEE MA-L registry
 
 ## Ideas / contributions welcome
-Open points: configurable finite lease, manual MAC entry, re-addressing devices on another subnet, other protocols (not planned).
+Open points: CIP in the command-line version, other protocols (not planned). The lease is infinite on purpose: with *Make permanent* the device goes static, so the lease no longer matters.
 
 Protocol references: RFC 951 (BOOTP), RFC 2131 (DHCP), RFC 2132 (options), RFC 1542 (BOOTP/DHCP interoperability); ODVA CIP/EtherNet/IP specification (TCP/IP Interface Object).

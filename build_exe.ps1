@@ -2,7 +2,7 @@
 # onedir instead of onefile: no self-extraction to %TEMP% at every start, which is what
 # antivirus/EDR products dislike most. The exe carries icon and version info.
 # Requires: pip install pyinstaller customtkinter pillow
-$version = "2.0"
+$version = "2.1"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $out  = Join-Path $here "build-out"
 $dist = Join-Path $out "dist"

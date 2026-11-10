@@ -186,5 +186,20 @@ class TestLoopback(unittest.TestCase):
             a.close()
 
 
+class TestMacParsing(unittest.TestCase):
+    EXP = bytes.fromhex("00157BAABBCC")
+
+    def test_accepted_formats(self):
+        for m in ("00:15:7B:AA:BB:CC", "00-15-7b-aa-bb-cc", "00157BAABBCC", "00157baabbcc",
+                  "0015.7BAA.BBCC", "  00:15:7B:AA:BB:CC  ", "00 15 7B AA BB CC"):
+            self.assertEqual(bootp.mac_to_bytes(m), self.EXP, m)
+
+    def test_rejected(self):
+        for m in ("", "zz", "00:15:7B:AA:BB", "00:15:7B:AA:BB:CC:DD", "00157BAABBC",
+                  "00157BAABBCCDD", "00:15:7B:AA:BB:GG", "100:15:7B:AA:BB:CC"):
+            with self.assertRaises(ValueError, msg=m):
+                bootp.mac_to_bytes(m)
+
+
 if __name__ == "__main__":
     unittest.main()

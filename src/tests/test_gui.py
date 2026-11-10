@@ -162,6 +162,28 @@ class TestSmoke(unittest.TestCase):
             app.stop_server()
             app.destroy()
 
+    def test_manual_mac_pasted_without_separators(self):
+        try:
+            app = gui.App()
+        except Exception as e:
+            self.skipTest(f"Tk not available: {e}")
+        app.withdraw()
+        try:
+            app.set_ifaces([netif.Iface("lo", "loopback", "127.0.0.1", 8, "")])
+            app.start()
+            app.v_mac.set("00157baabbcc")
+            app.v_ip.set("127.0.0.9")
+            app.v_mask.set("255.0.0.0")
+            app.v_perm.set(False)
+            app.arm()
+            self.assertIn("00:15:7B:AA:BB:CC", app.resp.armed)
+            self.assertEqual(app.v_mac.get(), "00:15:7B:AA:BB:CC")
+            app.refresh_tree()
+            self.assertEqual(app.tree.set("00:15:7B:AA:BB:CC", "stato"), "waiting")
+        finally:
+            app.stop_server()
+            app.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()
